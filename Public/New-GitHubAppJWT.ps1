@@ -20,6 +20,9 @@ function New-GitHubAppJWT {
     .PARAMETER PrivateKeyPath
         The file system path to the GitHub App's RSA private key in PEM format (.pem file).
 
+    .PARAMETER PrivateKeyPemBase64
+        A base64-encoded string containing the GitHub App RSA private key in PEM format.
+
     .PARAMETER ExpirationSeconds
         The number of seconds from now until the JWT expires. Must be between 1 and 600
         (10 minutes). Defaults to 600.
@@ -35,6 +38,12 @@ function New-GitHubAppJWT {
 
         Generates a JWT that expires in 5 minutes.
 
+    .EXAMPLE
+        $pemBase64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes((Get-Content './my-github-app.pem' -Raw)))
+        $jwt = New-GitHubAppJWT -AppId 12345 -PrivateKeyPemBase64 $pemBase64
+
+        Generates a JWT using a base64-encoded PEM private key string.
+
     .OUTPUTS
         System.String
         Returns the JWT as a dot-separated base64url string: <header>.<payload>.<signature>
@@ -43,14 +52,14 @@ function New-GitHubAppJWT {
         Requires PowerShell 7.0 or later.
         GitHub documentation: https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-json-web-token-jwt-for-a-github-app
     #>
-    [CmdletBinding()]
+    [CmdletBinding(DefaultParameterSetName = 'FromPath')]
     [OutputType([string])]
     param(
         [Parameter(Mandatory, HelpMessage = 'The numeric GitHub App ID.')]
         [ValidateRange(1, [int]::MaxValue)]
         [int]$AppId,
 
-        [Parameter(Mandatory, HelpMessage = 'Path to the GitHub App RSA private key (.pem) file.')]
+        [Parameter(Mandatory, ParameterSetName = 'FromPath', HelpMessage = 'Path to the GitHub App RSA private key (.pem) file.')]
         [ValidateScript({
             if (-not (Test-Path -Path $_ -PathType Leaf)) {
                 throw "Private key file not found: $_"
@@ -58,6 +67,10 @@ function New-GitHubAppJWT {
             return $true
         })]
         [string]$PrivateKeyPath,
+
+        [Parameter(Mandatory, ParameterSetName = 'FromBase64', HelpMessage = 'Base64-encoded GitHub App RSA private key PEM content.')]
+        [ValidateNotNullOrEmpty()]
+        [string]$PrivateKeyPemBase64,
 
         [Parameter(HelpMessage = 'Seconds until JWT expiration (1-600). Defaults to 600.')]
         [ValidateRange(1, 600)]
@@ -68,14 +81,31 @@ function New-GitHubAppJWT {
         throw 'New-GitHubAppJWT requires PowerShell 7.0 or later.'
     }
 
-    $pemContent = Get-Content -Path $PrivateKeyPath -Raw
+    $pemContent = switch ($PSCmdlet.ParameterSetName) {
+        'FromPath' {
+            Get-Content -Path $PrivateKeyPath -Raw
+            break
+        }
+        'FromBase64' {
+            try {
+                [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($PrivateKeyPemBase64))
+            }
+            catch {
+                throw 'Failed to decode PrivateKeyPemBase64. Ensure it is a valid base64-encoded UTF-8 PEM string.'
+            }
+            break
+        }
+    }
 
     $rsa = [System.Security.Cryptography.RSA]::Create()
     try {
         $rsa.ImportFromPem($pemContent)
     }
     catch {
-        throw "Failed to import private key from '$PrivateKeyPath': $_"
+        if ($PSCmdlet.ParameterSetName -eq 'FromPath') {
+            throw "Failed to import private key from '$PrivateKeyPath': $_"
+        }
+        throw "Failed to import private key from PrivateKeyPemBase64: $_"
     }
 
     # JWT Header

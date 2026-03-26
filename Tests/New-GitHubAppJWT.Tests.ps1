@@ -8,7 +8,9 @@ Describe 'New-GitHubAppJWT' {
         # Generate a throw-away 2048-bit RSA key for testing
         $script:testRsa = [System.Security.Cryptography.RSA]::Create(2048)
         $script:testPemPath = Join-Path $TestDrive 'test-key.pem'
-        Set-Content -Path $script:testPemPath -Value $script:testRsa.ExportRSAPrivateKeyPem() -NoNewline
+        $script:testPem = $script:testRsa.ExportRSAPrivateKeyPem()
+        Set-Content -Path $script:testPemPath -Value $script:testPem -NoNewline
+        $script:testPemBase64 = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($script:testPem))
     }
 
     AfterAll {
@@ -31,6 +33,10 @@ Describe 'New-GitHubAppJWT' {
         It 'Should throw when ExpirationSeconds exceeds 600' {
             { New-GitHubAppJWT -AppId 12345 -PrivateKeyPath $script:testPemPath -ExpirationSeconds 601 } | Should -Throw
         }
+
+        It 'Should throw when PrivateKeyPemBase64 is not valid base64' {
+            { New-GitHubAppJWT -AppId 12345 -PrivateKeyPemBase64 'not-base64@@@' } | Should -Throw
+        }
     }
 
     Context 'JWT structure' {
@@ -49,6 +55,12 @@ Describe 'New-GitHubAppJWT' {
 
         It 'Should not contain base64 padding characters' {
             $script:jwt | Should -Not -Match '='
+        }
+
+        It 'Should generate JWT using PrivateKeyPemBase64' {
+            $jwt = New-GitHubAppJWT -AppId 12345 -PrivateKeyPemBase64 $script:testPemBase64
+            $jwt | Should -Not -BeNullOrEmpty
+            ($jwt -split '\.').Count | Should -Be 3
         }
     }
 

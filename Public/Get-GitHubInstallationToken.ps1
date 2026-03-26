@@ -20,6 +20,9 @@ function Get-GitHubInstallationToken {
     .PARAMETER PrivateKeyPath
         The file system path to the GitHub App's RSA private key in PEM format (.pem file).
 
+    .PARAMETER PrivateKeyPemBase64
+        A base64-encoded string containing the GitHub App RSA private key in PEM format.
+
     .PARAMETER Permissions
         An optional hashtable of permission scopes to request for the token. If omitted,
         all permissions granted to the installation are requested. Example:
@@ -37,6 +40,12 @@ function Get-GitHubInstallationToken {
 
         Gets a scoped installation access token with read-only access to repository contents.
 
+    .EXAMPLE
+        $pemBase64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes((Get-Content './my-github-app.pem' -Raw)))
+        $result = Get-GitHubInstallationToken -AppId 12345 -InstallationId 67890 -PrivateKeyPemBase64 $pemBase64
+
+        Gets an installation access token using a base64-encoded PEM private key string.
+
     .OUTPUTS
         PSCustomObject with the following properties:
           Token     [string]  — The installation access token.
@@ -46,7 +55,7 @@ function Get-GitHubInstallationToken {
         Requires PowerShell 7.0 or later.
         GitHub documentation: https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/authenticating-as-a-github-app-installation
     #>
-    [CmdletBinding()]
+    [CmdletBinding(DefaultParameterSetName = 'FromPath')]
     [OutputType([PSCustomObject])]
     param(
         [Parameter(Mandatory, HelpMessage = 'The numeric GitHub App ID.')]
@@ -57,7 +66,7 @@ function Get-GitHubInstallationToken {
         [ValidateRange(1, [int]::MaxValue)]
         [int]$InstallationId,
 
-        [Parameter(Mandatory, HelpMessage = 'Path to the GitHub App RSA private key (.pem) file.')]
+        [Parameter(Mandatory, ParameterSetName = 'FromPath', HelpMessage = 'Path to the GitHub App RSA private key (.pem) file.')]
         [ValidateScript({
             if (-not (Test-Path -Path $_ -PathType Leaf)) {
                 throw "Private key file not found: $_"
@@ -66,11 +75,26 @@ function Get-GitHubInstallationToken {
         })]
         [string]$PrivateKeyPath,
 
+        [Parameter(Mandatory, ParameterSetName = 'FromBase64', HelpMessage = 'Base64-encoded GitHub App RSA private key PEM content.')]
+        [ValidateNotNullOrEmpty()]
+        [string]$PrivateKeyPemBase64,
+
         [Parameter(HelpMessage = 'Optional hashtable of permission scopes for the token.')]
         [hashtable]$Permissions
     )
 
-    $jwt = New-GitHubAppJWT -AppId $AppId -PrivateKeyPath $PrivateKeyPath
+    $jwtParams = @{
+        AppId = $AppId
+    }
+
+    if ($PSCmdlet.ParameterSetName -eq 'FromPath') {
+        $jwtParams.PrivateKeyPath = $PrivateKeyPath
+    }
+    else {
+        $jwtParams.PrivateKeyPemBase64 = $PrivateKeyPemBase64
+    }
+
+    $jwt = New-GitHubAppJWT @jwtParams
 
     $uri = "https://api.github.com/app/installations/$InstallationId/access_tokens"
     $headers = @{

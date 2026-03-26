@@ -7,7 +7,9 @@ Describe 'Get-GitHubInstallationToken' {
     BeforeAll {
         $script:testRsa = [System.Security.Cryptography.RSA]::Create(2048)
         $script:testPemPath = Join-Path $TestDrive 'test-key.pem'
-        Set-Content -Path $script:testPemPath -Value $script:testRsa.ExportRSAPrivateKeyPem() -NoNewline
+        $script:testPem = $script:testRsa.ExportRSAPrivateKeyPem()
+        Set-Content -Path $script:testPemPath -Value $script:testPem -NoNewline
+        $script:testPemBase64 = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($script:testPem))
     }
 
     AfterAll {
@@ -25,6 +27,10 @@ Describe 'Get-GitHubInstallationToken' {
 
         It 'Should throw when PrivateKeyPath does not exist' {
             { Get-GitHubInstallationToken -AppId 1 -InstallationId 1 -PrivateKeyPath '/nonexistent/key.pem' } | Should -Throw
+        }
+
+        It 'Should throw when PrivateKeyPemBase64 is not valid base64' {
+            { Get-GitHubInstallationToken -AppId 1 -InstallationId 1 -PrivateKeyPemBase64 'not-base64@@@' } | Should -Throw
         }
     }
 
@@ -44,6 +50,12 @@ Describe 'Get-GitHubInstallationToken' {
             $result | Should -Not -BeNullOrEmpty
             $result.Token     | Should -Be 'ghs_mocktoken1234567890'
             $result.ExpiresAt | Should -Be '2099-01-01T00:00:00Z'
+        }
+
+        It 'Should support PrivateKeyPemBase64 for authentication' {
+            $result = Get-GitHubInstallationToken -AppId 12345 -InstallationId 67890 -PrivateKeyPemBase64 $script:testPemBase64
+            $result | Should -Not -BeNullOrEmpty
+            $result.Token | Should -Be 'ghs_mocktoken1234567890'
         }
 
         It 'Should call Invoke-RestMethod with a Bearer JWT Authorization header' {
