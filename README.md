@@ -64,6 +64,46 @@ $result = Get-GitHubInstallationToken -AppId <int> -InstallationId <int> (-Priva
 
 \* Provide either `PrivateKeyPath` or `PrivateKeyPemBase64`.
 
+**Permissions hashtable reference**
+
+- Value format: use lowercase strings, typically `'read'` or `'write'`.
+- Special case: `metadata` is read-only (`'read'`) and cannot be set to `'write'`.
+- The token cannot request permissions your app installation does not already have.
+
+Common keys you can use in `-Permissions`:
+
+| Hashtable key | Allowed values |
+|---------------|----------------|
+| `actions` | `'read'`, `'write'` |
+| `administration` | `'read'`, `'write'` |
+| `checks` | `'read'`, `'write'` |
+| `codespaces` | `'read'`, `'write'` |
+| `contents` | `'read'`, `'write'` |
+| `deployments` | `'read'`, `'write'` |
+| `discussions` | `'read'`, `'write'` |
+| `environments` | `'read'`, `'write'` |
+| `issues` | `'read'`, `'write'` |
+| `metadata` | `'read'` |
+| `packages` | `'read'`, `'write'` |
+| `pages` | `'read'`, `'write'` |
+| `pull_requests` | `'read'`, `'write'` |
+| `repository_hooks` | `'read'`, `'write'` |
+| `repository_projects` | `'read'`, `'write'` |
+| `security_events` | `'read'`, `'write'` |
+| `statuses` | `'read'`, `'write'` |
+
+Example:
+
+```powershell
+-Permissions @{
+    contents      = 'read'
+    issues        = 'write'
+    pull_requests = 'write'
+}
+```
+
+For the complete, up-to-date permission set, see GitHub Docs for installation access tokens and your app's configured permissions in GitHub settings.
+
 **Returns** a `PSCustomObject` with:
 
 | Property    | Type   | Description                                  |
